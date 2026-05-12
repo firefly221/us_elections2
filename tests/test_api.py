@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 
 from app import create_app
-from app.db import get_db, init_db
+from app.db import init_db
 
 
 class ApiTestCase(unittest.TestCase):
@@ -18,37 +18,46 @@ class ApiTestCase(unittest.TestCase):
     def tearDown(self):
         self.tmpdir.cleanup()
 
-    def test_health_returns_ok(self):
-        response = self.client.get("/api/health")
+    def register(self, email="Alice@example.com"):
+        return self.client.post(
+            "/api/auth/register",
+            json={
+                "name": "Alice Voter",
+                "email": email,
+                "password": "strongpass123",
+                "confirm_password": "strongpass123",
+            },
+        )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.get_json(), {"status": "ok"})
+    def test_register_creates_voter(self):
+        response = self.register()
 
-    def test_database_tables_are_created(self):
-        with self.app.app_context():
-            tables = get_db().execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            ).fetchall()
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.get_json()["voter"]["email"], "alice@example.com")
 
-        table_names = {table["name"] for table in tables}
-        self.assertIn("voters", table_names)
-        self.assertIn("candidates", table_names)
+    def test_first_registered_user_is_admin(self):
+        response = self.register()
 
-    def test_can_insert_candidate_and_voter(self):
-        with self.app.app_context():
-            db = get_db()
-            db.execute("INSERT INTO candidates (name, party) VALUES (?, ?)", ("Jane", "Demo"))
-            db.execute(
-                "INSERT INTO voters (email, password_hash, name) VALUES (?, ?, ?)",
-                ("alice@example.com", "hash", "Alice"),
-            )
-            db.commit()
+        self.assertTrue(response.get_json()["voter"]["is_admin"])
 
-            candidates = db.execute("SELECT COUNT(*) FROM candidates").fetchone()[0]
-            voters = db.execute("SELECT COUNT(*) FROM voters").fetchone()[0]
+    def test_duplicate_email_is_rejected(self):
+        self.register()
+        response = self.register(email="alice@example.com")
 
-        self.assertEqual(candidates, 1)
-        self.assertEqual(voters, 1)
+        self.assertEqual(response.status_code, 409)
+
+    def test_invalid_registration_is_rejected(self):
+        response = self.client.post(
+            "/api/auth/register",
+            json={
+                "name": "",
+                "email": "bad-email",
+                "password": "short",
+                "confirm_password": "different",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

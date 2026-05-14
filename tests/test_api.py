@@ -29,7 +29,14 @@ class ApiTestCase(unittest.TestCase):
             },
         )
     
-    
+    def test_users_count_returns_number_of_registered_users(self):
+        self.register()
+        self.register(email="bob@example.com")
+
+        response = self.client.get("/api/users/count")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["users_count"], 2)
 
     def test_register_creates_voter(self):
         response = self.register()

@@ -8,14 +8,16 @@ from .db import get_db
 
 api = Blueprint("api", __name__, url_prefix="/api")
 
-
+@api.get("/users/count")
+def users_count():
+    count = get_db().execute("SELECT COUNT(*) FROM voters").fetchone()[0]
+    return jsonify({"users_count": count})
 
 def get_json():
     data = request.get_json(silent=True)
     if not isinstance(data, dict):
         return None
     return data
-
 
 def voter_to_json(voter):
     return {
